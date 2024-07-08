@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loan Default Predictor</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="header">
+    <div class="header-inner">
+        <div class="logo">💳 Loan Default Predictor</div>
+        <div class="subtitle">Random Forest · XGBoost · Gradient Boosting · ROC-AUC</div>
+    </div>
+</div>
+<div class="container">
+
+    <div class="stats-row">
+        <div class="stat-card"><div class="stat-label">Dataset</div><div class="stat-val">{{ results.dataset_size }} loans</div></div>
+        <div class="stat-card"><div class="stat-label">Default Rate</div><div class="stat-val">{{ results.default_rate }}%</div></div>
+        <div class="stat-card"><div class="stat-label">Best Model</div><div class="stat-val">{{ results.best_model }}</div></div>
+        <div class="stat-card"><div class="stat-label">Metric</div><div class="stat-val">ROC-AUC</div></div>
+    </div>
+
+    <div class="card">
+        <h2>Model Comparison</h2>
+        <table>
+            <thead><tr><th>Model</th><th>Accuracy</th><th>ROC-AUC</th><th>CV AUC</th></tr></thead>
+            <tbody>
+                {% for r in results.model_results %}
+                <tr class="{{ 'best-row' if r.model == results.best_model }}">
+                    <td>{{ r.model }}{% if r.model == results.best_model %} ⭐{% endif %}</td>
+                    <td>{{ r.accuracy }}%</td>
+                    <td>{{ r.auc }}%</td>
+                    <td>{{ r.cv_auc }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Feature Importance</h2>
+        {% for feat, score in results.feature_importance %}
+        <div class="feat-row">
+            <div class="feat-name">{{ feat }}</div>
+            <div class="feat-bar-wrap">
+                <div class="feat-bar" style="width: {{ (score * 100 / results.feature_importance[0][1]) | round(1) }}%"></div>
+            </div>
+            <div class="feat-score">{{ "%.3f"|format(score) }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="card">
+        <h2>Predict Loan Default Risk</h2>
+        <div class="form-grid">
+            {% for col in results.feature_cols %}
+            <div class="form-group">
+                <label>{{ col }}</label>
+                <input type="number" id="{{ col }}" value="0" step="any">
+            </div>
+            {% endfor %}
+        </div>
+        <button onclick="predict()">Predict Default Risk</button>
+        <div id="result-box" style="display:none;"></div>
+    </div>
+</div>
+
+<script>
+async function predict() {
+    const cols = {{ results.feature_cols | tojson }};
+    const data = {};
+    cols.forEach(c => data[c] = document.getElementById(c).value);
+    const res = await fetch("/predict", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(data)
+    });
+    const r = await res.json();
+    if (r.error) { alert(r.error); return; }
+    const box = document.getElementById("result-box");
+    const cls = r.prediction === 1 ? "result-negative" : "result-positive";
+    box.className = "result-box " + cls;
+    box.innerHTML = `
+        <div class="result-label">${r.prediction === 1 ? "⚠️" : "✅"} ${r.label}</div>
+        <div class="result-prob">Default Probability: <strong>${r.probability}%</strong></div>
+        <div class="result-risk">Risk Level: <strong>${r.risk}</strong></div>
+    `;
+    box.style.display = "block";
+}
+</script>
+</body>
+</html>
